@@ -1,0 +1,1202 @@
+---
+title: "Flight Delay from January 2017 - July 2022"
+author: "Neysha Pagan, Santiago Lampon, Justin Washington, Brandon O'Linn"
+date: "2022-11-08"
+output: pdf_document
+toc: TRUE
+---
+
+# Introduction
+
+The purpose of this analysis is to explore the dataset about Flight Delay from January 2017 - July 2022. The information was published by the U.S. Department of Transportation's Bureau of Transportation Statistics (BTS) to track the on-time performance of domestic flights operated by large carriers.
+
+# About the data
+
+The dataset used for this analysis was obtained from *Kaggle* under the name of Flight Delay from January 2017 - July 2022. The data covers a summary information on the number of on-time, delayed, canceled and diverted flights, published about 30 days after the month's end. The dataset can be found here: <https://tinyurl.com/4zjv4ec9>
+
+This dataset contains 101,315 records and 21 columns. The data contains of a number of the following fields:
+
+1)  year - Year data collected
+2)  month - Numeric representation of the month
+3)  carrier - Carrier
+4)  carrier_name - Carrier Name
+5)  airport - Airport code
+6)  airport_name - Name of airport
+7)  arr_flights - Number of flights arriving at airport
+8)  arr_del15 - Number of flights more than 15 minutes late
+9)  carrier_ct - Number of flights delayed due to air carrier (e.g. no crew)
+10) weather_ct - Number of flights due to weather
+11) nas_ct - Number of flights delayed due to National Aviation System (e.g. heavy air traffic)
+12) security_ct - Number of flights canceled due to a security breach
+13) lateaircraftct - Number of flights delayed as a result of another flight on the same aircraft delayed
+14) arr_cancelled - Number of cancelled flights
+15) arr_diverted - Number of flights that were diverted
+16) arr_delay - Total time (minutes) of delayed flight
+17) carrier_delay - Total time (minutes) of delay due to air carrier
+18) weather_delay - Total time (minutes) of delay due to inclement weather
+19) nas_delay - Total time (minutes) of delay due to National Aviation System.
+20) security_delay - Total time (minutes) of delay as a result of a security issue
+21) lateaircraftdelay - Total time (minutes) of delay flights as a result of a previous flight on the same airplane being late
+
+# Analysis and Models
+
+We will be exploring the data by looking at the internal structure and exploring the contents of the dataset. We also will explore how to identify null values and duplicate values, perform some data cleansing and develop some graphs.
+
+## Read the file
+
+The following function reads the contents of the file, stores it in a variable named 'bank', and replaces null values as blanks.
+
+```{r, echo=TRUE}
+# Read the file
+data<- read.csv("/Users/innerworld/Documents/Work/Master/IST-707/Project/Flight/Airline_Delay_Cause.csv"
+, na.string = c("")) 
+options(digits = 2)
+```
+
+## Exploring the dataset
+
+The following functions create some initial data analysis.
+
+The **str()** function displays the internal structure of an R object. In this case, the R object is the data-storytelling data frame. This data frame consists of 101,315 observations (rows) and 21 variables (columns).
+
+```{r, echo=TRUE}
+# Display internal structure
+str(data)
+```
+
+As shown in the output above, most of the columns are numeric data type. Columns like ***carrier***, ***carrier_name***, ***airport***, and ***airport_name*** are char data type, except ***year***, and ***month*** which are integers.
+
+The next functions are used to display *n* number of rows of the data frame. The **head()** function is used to display the first four rows of the data frame. The **tail()** function, on the other hand, is used to display the last four rows of the data frame.
+
+```{r, echo=TRUE}
+# Display first four rows
+head(data,4)
+
+# Display last four rows
+tail(data,4)
+```
+
+### Identify missing values
+
+In order to identify missing data, functions like **is.na()**, **complete.case()** or **!complete.case()** can be executed. The first function combined with the **which()** function returns the positions with the missing values in your data set. The next two functions, **complete.case()** or **!complete.case()**, combined the **nrow()** function will return the number of observed values instead of missing values, and the number of records that have a missing value respectively.
+
+```{r, echo=TRUE}
+# Returns the positions with the missing values in your data set
+#which(is.na(data))
+
+# Returns the complete number of observed values
+nrow(data[complete.cases(data),])
+
+# Returns the number of records that have missing values
+nrow(data[!complete.cases(data),])
+```
+
+The output of these functions reflects the data set has a total of 100,960 observed values, where 355 of them have missing values.
+
+### Identify duplicate values
+
+The following code checks for duplicate values within the dataset.
+
+```{r, echo=TRUE}
+# Check duplicate values
+nrow(data[duplicated(data),])
+```
+
+The result of this function reveal there is no duplicate values in this dataset.
+
+# Results
+
+Load the libraries
+
+```{r, echo=TRUE}
+#Load the libraries
+library(arules)
+library(arulesViz)
+library(sqldf)
+library(Hmisc)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(plotly)
+library(tidyverse)
+library(cluster)   
+library(factoextra)
+#library(ClusterR)
+library(NbClust)
+library(dendextend)
+library(parameters)
+library(ggdendro)
+library(ape)
+library(rpart.plot)
+library(rpart)
+library(caTools)
+library(rattle)
+library(naivebayes)
+library(psych)
+library(caret)
+```
+
+## Understanding the data
+
+It is beneficial to understand the contents of the data in order to become more familiar with it and its contents. First, let's get general statistics about the data, following by some queries and some visualizations.
+
+```{r, echo=TRUE}
+# Data general statistics of the dataset using the summary() function
+summary(data)
+
+# Get unique carriers by name
+carriers <- sqldf("SELECT distinct carrier_name, carrier
+                  FROM data")
+carriers
+
+# Get unique airports by name
+airport <- sqldf("SELECT distinct airport_name, airport
+                  FROM data")
+airport
+```
+
+This dataset has 20 unique carriers and consist of 384 unique airports. As mentioned, most of the columns in the dataset are integer and numeric. Therefore minimum and maximum values can be obtained as well as quartiles, median, means for each of the columns.
+
+Years goes from 2017 to 2022, and months goes from 1 to 12. The minimum value across all columns is 0, whereas the maximum value is 429,164. The maximum value correspond to arr_delay column, which means there is a record that has a maximum value of 429,164 total minutes (or 7,153 hours) of delayed flight! That seems to be an outlier in this dataset.
+
+NA's values can be also observed on each of the columns.
+
+### Key questions about the data
+
+1)  Which airlines typically have significant flight delays?
+2)  Which airports typically have significant flight delays?
+3)  Which time of year, month, and day typically have the most flight delays?
+4)  Which day(s) of the week typically have the most flight delays?
+5)  Which flight distance range(s) typically involve the most flight delays?
+6)  What are the statistics of the most common delay reasons? What are the top cancellation reasons?
+7)  Which airlines typically have significant flight delays?
+
+### Data Cleansing: Dealing with missing values
+
+To deal with missing values, we will be replacing all NA's values with 0 as an integer.
+
+```{r, echo=TRUE}
+#Replacing all NA's with 0, didn't want to cut any particular rows that would cut any particular carrier or airport from the data.
+data[is.na(data)] = 0
+
+#Next function, displays all the columns and made sure that they are no NA's left
+sapply(data, function(x) sum(is.na(x)))
+
+#is.na(data)
+```
+
+### Data Manipulation: Aggregation for initial visualizations
+
+```{r, echo=TRUE}
+delays_all<- aggregate(cbind(data$arr_flights, data$arr_del15, data$carrier_ct, data$weather_ct, data$nas_ct, data$security_ct, data$late_aircraft_ct, data$arr_cancelled, data$arr_diverted, data$arr_delay, data$carrier_delay, data$weather_delay, data$nas_delay, data$security_delay, data$late_aircraft_delay), list(data$carrier_name), sum)
+
+# Change column names
+cname <- colnames(delays_all)
+cname[1] <- "carrier_name" 
+cname[2] <- "arr_flights"
+cname[3] <- "arr_del15"
+cname[4] <- "carrier_ct"
+cname[5] <- "weather_ct"
+cname[6] <- "nas_ct"
+cname[7] <- "security_ct"
+cname[8] <- "late_aricraft_ct"
+cname[9] <- "arr_cancelled"
+cname[10] <- "arr_diverted"
+cname[11] <- "arr_delay"
+cname[12] <- "carrier_delay"
+cname[13] <- "weather_delay"
+cname[14] <- "nas_delay"
+cname[15] <- "security_delay"
+cname[16] <- "late_aircraft_delay"
+
+colnames(delays_all) <- cname
+delays_all$carrier_name  <- factor(delays_all$carrier_name)
+
+str(delays_all)
+```
+
+## Visualizations
+
+This section provides seven different visualizations to understand the data.
+
+### Boxplot for all numeric columns in dataset
+
+```{r, echo=TRUE}
+# Remove first column, the carrier_name column
+delays_notname <- delays_all[,2:16]
+delays_notname
+
+# Boxplot for all numeric columns in dataset
+boxplot(delays_notname, las = 2, xlab = "", ylab = "", cex.lab=1, cex.axis=0.5, method= "jitter")
+```
+
+In the boxplot above, it is noticeable outlier values for some of the columns, specially the arr_delay, carrier_delay and late_aircraft_delay columns. Recall that the maximum value for arr_delay column, is 429,164 which means 429,164 total minutes (7,153 hours or almost 10 months) of a delayed flight.
+
+### Boxplot for arr_flights, weather_ct, arr_delay
+
+```{r, echo=TRUE}
+# Higher to lower boxplots for arrival flights (arr_flights)
+medians <- reorder(delays_all$carrier_name, -delays_all$arr_flights, median)
+boxplot(delays_all$arr_flights ~ medians, las = 2, xlab = "", ylab = "arr_flights", cex.lab=1, cex.axis=0.5, method= "jitter")
+
+# Higher to lower boxplots for flight delay due to weather (weather_ct)
+medians <- reorder(delays_all$carrier_name, -delays_all$weather_ct, median)
+boxplot(delays_all$weather_ct ~ medians, las = 2, xlab = "", ylab = "weather_ct", cex.lab=1, cex.axis=0.5, method= "jitter")
+
+# Higher to lower boxplots for total time (minutes) of delayed flight (arr_delay)
+medians <- reorder(delays_all$carrier_name, -delays_all$arr_delay, median)
+boxplot(delays_all$arr_delay ~ medians, las = 2, xlab = "", ylab = "arr_delay", cex.lab=1, cex.axis=0.5, method= "jitter")
+```
+
+```{r, echo=TRUE}
+# Arrival flights delay per carrier
+boxplot(data$arr_flights ~ carrier_name, data = data, las = 2, xlab = "", main="Arrival flights delay per carrier", cex.lab=1, cex.axis=0.5, method= "jitter")
+
+# Flight delays due to weather per carrier
+boxplot(data$weather_ct ~ carrier_name, data = data, las = 2, xlab = "", main="Flight delays due to weather per carrier", cex.lab=1, cex.axis=0.5, method= "jitter")
+
+# Total time delayed flights per carrier
+boxplot(data$arr_delay  ~ carrier_name, data = data, las = 2, xlab = "", main="Total time delayed flights per carrier", cex.lab=1, cex.axis=0.5, method= "jitter")
+
+# Delays analysis for Southwest Airlines Co.
+delays_all$carrier_name ="Southwest Airlines Co."
+
+# Arrival flight delays for Southwest Airlines Co.
+medians <- reorder(delays_all$carrier_name, -delays_all$arr_flights, median)
+boxplot(delays_all$arr_flights ~ medians, las = 2, main="Arrival flight delays for Southwest Airlines Co.", xlab = "", ylab = "arr_flights", cex.lab=1, cex.axis=0.5, method= "jitter")
+
+# Delays for Southwest Airlines Co. due to weather
+medians <- reorder(delays_all$carrier_name, -delays_all$weather_ct, median)
+boxplot(delays_all$weather_ct ~ medians, las = 2,  main="Delays for Southwest Airlines Co. due to weather", xlab = "", ylab = "weather_ct", cex.lab=1, cex.axis=0.5, method= "jitter")
+
+# Total time delayed flights for Southwest Airlines Co.
+medians <- reorder(delays_all$carrier_name, -delays_all$arr_delay, median)
+boxplot(delays_all$arr_delay ~ medians, las = 2,  main="Total time delayed flights for Southwest Airlines Co.", xlab = "", ylab = "arr_delay", cex.lab=1, cex.axis=0.5, method= "jitter")
+```
+
+### Graph #1: Scatter Plot
+
+```{r, echo=TRUE}
+# graph
+ggplot(data=data, aes(x=weather_ct, y=year, color=month)) + 
+  geom_point()
+```
+
+### Graph #2: Scatter Plot
+
+```{r, echo = TRUE}
+ggplot(data, aes(arr_flights, arr_del15, colour = carrier_name)) + 
+  geom_point()
+```
+
+### Graph #3: Multiple Scatter Plots
+
+```{r, echo=TRUE}
+# Aggregated the delay and cancellation reasons per airline
+delays <- aggregate(cbind(data$arr_flights, data$arr_del15, data$carrier_ct, data$weather_ct, data$nas_ct, data$security_ct, data$late_aircraft_ct), list(data$carrier_name), sum)
+
+# Print the list
+#delays
+
+# Change column names
+cname <- colnames(delays)
+cname[1] <- "carrier_name" 
+cname[2] <- "arr_flights"
+cname[3] <- "arr_del15"
+cname[4] <- "carrier_ct"
+cname[5] <- "weather_ct"
+cname[6] <- "nas_ct"
+cname[7] <- "security_ct"
+cname[8] <- "late_aricraft_ct"
+colnames(delays) <- cname
+
+# Print the list
+delays
+
+#Check relations between the delay reasons
+plot(delays)
+```
+
+### Count of weather delays per carrier
+
+```{r, echo=TRUE}
+#Here we look at the count of weather delays per carrier
+#Skywest and American airlines got affected the most
+ggplot(data=delays, aes(x=weather_ct, y=carrier_name, group=carrier_name, colour=carrier_name)) +
+       geom_line() +
+       geom_point()
+```
+
+### The most affected carrier by NAS
+
+```{r, echo=TRUE}
+#Here we look at the carrier that was affected the most by the national aviation systems(heavy air traffic)
+#Delta and Southwest were affected the most
+ggplot(data = delays, aes(x=carrier_name, y=nas_ct, colour=carrier_name)) +
+       geom_col()
+```
+
+### Airport analysis
+
+```{r, echo=TRUE}
+# Total number of occurred events per airport and per carrier
+airports <- sqldf("SELECT airport_name, carrier_name, count(carrier_name) as total_events
+                        FROM data
+                        GROUP BY airport, carrier_name
+                        ORDER BY total_events DESC, airport")
+airports
+```
+
+In this analysis, we can see SkyWest Airlines Inc. and Southwest Airlines Co. are the carriers with higher number of delays, and the affected airports are Albuquerque, NM: Albuquerque International Sunport, New Mexico, and Arcata/Eureka, CA: California Redwood Coast Humboldt County, California respectively.
+
+# Association Rule Discovery
+
+Let's continue analyzing and understanding the data before proceeding with the Association Rule Discovery process.
+
+## Cleaning the data
+
+Let's review again the data types for each column for the original ***data*** dataset. Numeric fields need to be discretized so that it can be used for the Apriori algorithm. Char fields need to be converted into factors
+
+```{r}
+# Check the data types for each column
+str(data)
+```
+
+```{r, echo=TRUE}
+# Convert fields into factor
+flights               <- data
+#str(flights)
+
+flights$carrier       <- factor(flights$carrier)
+flights$carrier_name  <- factor(flights$carrier_name)
+flights$airport       <- factor(flights$airport)
+flights$airport_name  <- factor(flights$airport_name)
+
+# Discretize arr_flights field
+min_arr_flights <- min(flights$arr_flights)
+#min_arr_flights
+
+max_arr_flights <- max(flights$arr_flights)
+#max_arr_flights
+
+bins = 20 
+width=(max_arr_flights - min_arr_flights)/bins;
+#width
+flights$arr_flights = cut(flights$arr_flights, breaks=seq(min_arr_flights, max_arr_flights, width))
+
+#flights$arr_flights
+str(flights)
+```
+
+```{r, echo=TRUE}
+# Discretize arr_del15 field
+min_arr_del15 <- min(flights$arr_del15)
+#min_arr_del15
+
+max_arr_del15 <- max(flights$arr_del15)
+#max_arr_del15
+
+bins = 20 
+width=(max_arr_del15 - min_arr_del15)/bins;
+#width
+flights$arr_del15 = cut(flights$arr_del15, breaks=seq(min_arr_del15, max_arr_del15, width))
+
+#flights$arr_del15
+#str(flights)
+```
+
+```{r, echo=TRUE}
+# Discretize carrier_ct field
+min_carrier_ct <- min(flights$carrier_ct)
+#min_carrier_ct
+
+max_carrier_ct <- max(flights$carrier_ct)
+#max_carrier_ct
+
+bins = 20 
+width=(max_carrier_ct - min_carrier_ct)/bins;
+#width
+flights$carrier_ct = cut(flights$carrier_ct, breaks=seq(min_carrier_ct, max_carrier_ct, width))
+
+#flights$carrier_ct
+#str(flights)
+```
+
+```{r, echo=TRUE}
+# Discretize weather_ct field
+min_weather_ct <- min(flights$weather_ct)
+#min_weather_ct
+
+max_weather_ct <- max(flights$weather_ct)
+#max_weather_ct
+
+bins = 20
+width=(max_weather_ct - min_weather_ct)/bins;
+#width
+flights$weather_ct = cut(flights$weather_ct, breaks=seq(min_weather_ct, max_weather_ct, width))
+
+#flights$weather_ct
+#str(flights)
+```
+
+```{r, echo=TRUE}
+# Discretize nas_ct  field
+min_nas_ct  <- min(flights$nas_ct)
+#min_nas_ct 
+
+max_nas_ct  <- max(flights$nas_ct)
+#max_nas_ct 
+
+bins = 20 
+width=(max_nas_ct  - min_nas_ct)/bins;
+#width
+flights$nas_ct = cut(flights$nas_ct, breaks=seq(min_nas_ct, max_nas_ct, width))
+
+#flights$nas_ct
+#str(flights)
+```
+
+```{r, echo=TRUE}
+# Discretize security_ct  field
+min_security_ct  <- min(flights$security_ct)
+#min_security_ct 
+
+max_security_ct  <- max(flights$security_ct)
+#max_security_ct 
+
+bins = 20 
+width=(max_security_ct  - min_security_ct)/bins;
+#width
+flights$security_ct = cut(flights$security_ct, breaks=seq(min_security_ct, max_security_ct, width))
+
+#flights$security_ct
+#str(flights)
+```
+
+```{r, echo=TRUE}
+# Discretize late_aircraft_ct  field
+min_late_aircraft_ct  <- min(flights$late_aircraft_ct)
+#min_late_aircraft_ct 
+
+max_late_aircraft_ct  <- max(flights$late_aircraft_ct)
+#max_late_aircraft_ct 
+
+bins = 20
+width=(max_late_aircraft_ct  - min_late_aircraft_ct)/bins;
+#width
+flights$late_aircraft_ct = cut(flights$late_aircraft_ct, breaks=seq(min_late_aircraft_ct, max_late_aircraft_ct, width))
+
+#flights$late_aircraft_ct
+#str(flights)
+```
+
+```{r, echo=TRUE}
+# Discretize arr_delay  field
+min_arr_delay  <- min(flights$arr_delay)
+#min_arr_delay 
+
+max_arr_delay <- max(flights$arr_delay)
+#max_arr_delay 
+
+bins = 20
+width=(max_arr_delay - min_arr_delay)/bins;
+#width
+flights$arr_delay = cut(flights$arr_delay, breaks=seq(min_arr_delay, max_arr_delay, width))
+
+#flights$arr_delay
+#str(flights)
+```
+
+```{r}
+# Remove two columns and the last eight columns, and store it in a second variable called flightstemp
+#str(flights)
+flightstemp = subset(flights, select = -c(arr_cancelled,arr_diverted,carrier_delay,weather_delay,nas_delay,security_delay,late_aircraft_delay) )
+flightstemp <- flightstemp[,(3:14)]
+str(flightstemp)
+```
+
+All numeric columns need to be converted into factor in order to run Association Rule algorithms.
+
+## Association Rules
+
+### Highest Support Rules
+
+```{r}
+# Creating the rules(general)
+srules<- apriori(flightstemp, parameter = list(supp=0.01, conf=0.8))
+inspect(srules[1:10])
+
+# Sort rules by lift
+rulessup<- sort(srules, decreasing = TRUE, by ="support")
+inspect(rulessup[1:10])
+```
+
+```{r}
+# Get summary info about all rules
+summary(srules)
+
+# Plot rules
+plot(srules, measure = c("support", "lift"), shading = "confidence"
+     , main = "Support, Lift, and Confidence Top Rules", jitter =0)
+
+rulessup<- head(srules, n = 10, by = "support")
+inspect(rulessup)
+
+plot(rulessup, method = "graph")
+```
+
+### Highest Confidence Rules
+
+```{r}
+# Creating the rules(general)
+crules<- apriori(flightstemp, parameter = list(supp=0.01, conf=0.8))
+inspect(crules[1:10])
+
+# Sort rules by lift
+rulesconf<- sort(crules, decreasing = TRUE, by ="confidence")
+inspect(rulesconf[1:10])
+```
+
+```{r}
+# Get summary info about all rules
+summary(crules)
+
+# Plot rules
+plot(crules, measure = c("support", "lift"), shading = "confidence"
+     , main = "Support, Lift, and Confidence Top Rules", jitter =0)
+
+rulesconf<- head(crules, n = 10, by = "lift")
+inspect(rulesconf)
+
+plot(rulesconf, method = "graph")
+```
+
+### Highest Lift Rules
+
+```{r}
+# Creating the rules(general)
+rules<- apriori(flightstemp, parameter = list(supp=0.01, conf=0.8))
+inspect(rules[1:50])
+
+# Sort rules by lift
+ruleslift<- sort(rules, decreasing = TRUE, by ="lift")
+inspect(ruleslift[1:60])
+```
+
+The first result shows 50 rules, and the second result shows 60 rules sorted by lift in descending order. Let's continue analyzing all rules generated by the algorithm.
+
+```{r}
+# Get summary info about all rules
+summary(rules)
+
+# Plot rules
+plot(rules, measure = c("support", "lift"), shading = "confidence"
+     , main = "Support, Lift, and Confidence Top Rules", jitter =0)
+
+rules60<- head(rules, n = 60, by = "lift")
+inspect(rules60)
+
+plot(rules60, method = "graph")
+```
+
+### Analyzing rules and plots
+
+The summary information about all rules shows that for the 60 rules created, all of them are related to Hawaiian Airlines Inc. or Spirit Air Lines. This is because these rules has low support value, a confidence value of 1, and a high lift value of 84 or 33 respectively.
+
+The graphs shown above is useful because it helps us to understand which items are most frequent for each strongest rule sets.The red circles shows the criteria that occur more often and that are really related rather than coincidentally happening together.
+
+Let's analyze the rules by having the carrier set to *HA*, *NK*, and *B6* on the right hand side.
+
+```{r}
+# Set carrier as the right hand side of the rules.
+## RHS = carrier= HA
+HArules<- apriori(flightstemp, parameter = list(supp=0.01, conf = 0.80)
+                   , appearance =list(default = "lhs", rhs="carrier=HA"),control=list(verbose=F))
+HArules<- sort(HArules, decreasing = TRUE , by ="confidence")
+inspect(HArules[1:5])
+
+##RHS = carrier= NK
+NKrules<- apriori(flightstemp, parameter = list(supp=0.01, conf = 0.90), appearance =list(default = "lhs", rhs="carrier=NK"),control=list(verbose=F))
+NKrules<- sort(NKrules, by ="confidence")
+inspect(NKrules[1:5])
+
+##RHS = carrier = B6
+B6rules<- apriori(flightstemp, parameter = list(supp=0.01, conf = 0.90), appearance =list(default = "lhs", rhs="carrier=B6"),control=list(verbose=F))
+NKrules<- sort(B6rules, decreasing = TRUE, by ="lift")
+inspect(B6rules[1:5])
+```
+
+#### Analyzing carrier=HA
+
+By looking rule #4 for carrier =HA, Hawaiian Airlines Inc. has a high lift value, 84, a confidence value of 1 and a support of 0.011. This means that carrier=HA has a high chance to have a carrier name of Hawaiian Airlines Inc, and have a range of 0 to 1,100 of arrived flights.
+
+#### Analyzing carrier=NK
+
+By looking rule#2 for carrier=NK, carrier=NK has a support of 0.017, a confidence value of 1 and lift value of 33. It is highly possible that the carrier name is Spirit Air Lines, and have number of flight delays due to weather within a range of 0 to 11.3.
+
+#### Analyzing carrier=B6
+
+Rule #3 is related to carrier=B6 which corresponds to JetBlue Airways. This rule has a support of 0.034, a confidence of 1 and a lift of 24. This is not a very stron rule, but this rule suggest that there is likely to have a range of number of flights delayed as a result of another flight on the same aircraft delayed between 0 to 76.6.
+
+# Clustering Analysis
+
+Clustering Analysis is the second data mining task used to analyze Flight Delays data. Let's create a new variable for the data to avoid confusion with the previous analyses.
+
+```{r, echo=TRUE}
+Airline <- data
+```
+
+## Cleaning the data
+
+```{r, echo=TRUE}
+# Check for NA values (if any)
+sum(is.na(Airline))
+sapply(Airline, function(x) sum(is.na(x)))
+```
+
+```{r, echo=TRUE}
+# Set NA values to 0
+AD <- Airline
+AD[is.na(AD)] = 0
+sum(is.na(AD))
+```
+
+```{r, echo=TRUE}
+# Remove unnecessary columns
+AD1 <- subset(AD, select = - c(year, month, carrier, airport, airport_name, arr_flights, arr_del15, arr_cancelled, arr_diverted,arr_delay, carrier_delay, weather_delay, nas_delay, security_delay, late_aircraft_delay))
+
+AD2 <- subset(AD, select = - c(year, month, carrier, carrier_name, airport, arr_flights, arr_del15, carrier_ct, weather_ct,nas_ct, security_ct, late_aircraft_ct))
+```
+
+```{r, echo=TRUE}
+# Summarize data for AD1 and AD2
+AD1 <- AD1 %>%
+ group_by(carrier_name) %>%
+ summarise(sum_carrier_ct = sum(carrier_ct), sum_weather_ct = sum(weather_ct), sum_nas_ct = sum(nas_ct), sum_security_ct =   sum(security_ct), sum_late_aircraft_ct = sum(late_aircraft_ct))
+AD1
+```
+
+```{r, echo=TRUE}
+AD2 <- AD2 %>%
+ group_by(airport_name) %>%
+ summarise(sum_arr_cancelled = sum(arr_cancelled), sum_arr_diverted = sum(arr_diverted), mean_arr_delay = mean(arr_delay), mean_carrier_delay = mean(carrier_delay), mean_weather_delay = mean(weather_delay), mean_nas_delay = mean(nas_delay), mean_security_delay = mean(security_delay), mean_late_aircraft_delay = mean(late_aircraft_delay))
+AD2
+```
+
+## Kmeans on AD1
+
+### Prepping the data for clustering
+
+```{r, echo=TRUE}
+# Remove strings from dataset for clustering purposes
+AD1_km <-AD1[,2:6]
+
+```
+
+```{r, echo=TRUE}
+# Set seed for fixed random seed
+set.seed(123)
+
+# run k-means
+Clusters <- kmeans(AD1_km, 5)
+AD1_km$Clusters <- as.factor(Clusters$cluster)
+str(Clusters)
+Clusters$centers
+```
+
+```{r, echo=TRUE}
+kmeans(AD1_km, 5)
+```
+
+### Plot Results
+
+#### Elbow Method
+
+```{r, echo=TRUE}
+# Elbow method
+fviz_nbclust(AD1_km, kmeans, method = "wss") +
+  geom_vline(xintercept = 4, linetype = 2) + # add line for better visualization
+  labs(subtitle = "Elbow method")
+```
+
+```{r, echo =TRUE}
+# Add clusters to dataframe original dataframe
+AD1_km <- AD1
+AD1_km$Clusters <- as.factor(Clusters$cluster)
+```
+
+#### Cluster Plot
+
+```{r, echo=TRUE}
+clusplot(AD1_km, AD1_km$Clusters, color=TRUE, shade=TRUE, labels=0, lines=0)
+```
+
+#### Cluster Centers
+
+```{r, echo=TRUE}
+res_kmeans <- cluster_analysis(AD1_km,
+                 n = 9,
+                 method = "kmeans")
+plot(summary(res_kmeans))
+```
+
+#### Carriers per clusters
+
+```{r, echo=TRUE}
+ggplot(data=AD1_km, aes(x=carrier_name, fill=Clusters))+
+  geom_bar(stat="count") +
+  labs(title = "K = 9") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+### Hierarchical Clustering Algorithms (HAC)
+
+```{r, echo=TRUE}
+# Set carrier names as row names
+AD1_HAC <- AD1
+rownames(AD1_HAC) <- AD1_HAC$carrier_name
+View(AD1_HAC)
+```
+
+```{r, echo=TRUE}
+Euclidean <- dist(AD1_HAC, method = "euclidean")
+Maximum   <- dist(AD1_HAC, method = "maximum")
+Manhattan <- dist(AD1_HAC, method = "manhattan")
+Canberra  <- dist(AD1_HAC, method = "canberra")
+Binary    <- dist(AD1_HAC, method = "binary")
+Minkowski <- dist(AD1_HAC, method = "minkowski")
+```
+
+#### Cluster Dendrograms
+
+##### Euclidean Dendrogram
+
+```{r, echo=TRUE}
+HAC <- hclust(Euclidean, method="complete")
+plot(HAC, cex=0.6, hang=-1)
+rect.hclust(HAC, k =6, border=2:5)
+```
+
+##### Maximum Dendrogram
+
+```{r, echo=TRUE}
+HAC1 <- hclust(Maximum, method="complete")
+plot(HAC1, cex=0.6, hang=-1)
+rect.hclust(HAC1, k =5, border=2:5)
+```
+
+##### Manhattan Dendrogram
+
+```{r, echo=TRUE}
+HAC2 <- hclust(Manhattan, method="complete")
+plot(HAC2, cex=0.6, hang=-1)
+rect.hclust(HAC2, k =6, border=2:5)
+```
+
+##### Canberra Dendrogram
+
+```{r, echo=TRUE}
+HAC3 <- hclust(Canberra, method="complete")
+plot(HAC3, cex=0.6, hang=-1)
+rect.hclust(HAC3, k =7, border=2:5)
+```
+
+##### Binary Dendrogram
+
+```{r, echo=TRUE}
+HAC4 <- hclust(Binary, method="complete")
+plot(HAC4, cex=0.6, hang=-1)
+rect.hclust(HAC4, k =6, border=2:5)
+```
+
+##### Minkowski Dendrogram
+
+```{r, echo=TRUE}
+HAC5 <- hclust(Minkowski, method="complete")
+plot(HAC5, cex=0.6, hang=-1)
+rect.hclust(HAC5, k =6, border=2:5)
+```
+
+### Enhanced Distance Matrix Computation and Visualization
+
+#### Euclidean Distance Matrix
+
+```{r, echo=TRUE}
+fviz_dist(Euclidean)
+```
+
+#### Canberra Distance Matrix
+
+```{r, echo=TRUE}
+fviz_dist(Canberra)
+```
+
+## Kmeans on AD2
+
+### Prepping the data for clustering
+
+```{r, echo=TRUE}
+# Remove strings from dataset for clustering purposes
+AD2_km <-AD2[,2:9]
+```
+
+```{r, echo=TRUE}
+# Set seed for fixed random seed
+set.seed(123)
+
+# run k-means
+Clusters <- kmeans(AD2_km, 5)
+AD2_km$Clusters <- as.factor(Clusters$cluster)
+str(Clusters)
+Clusters$centers
+```
+
+```{r, echo=TRUE}
+kmeans(AD2_km, 5)
+```
+
+### Plot Results
+
+#### Elbow Method
+
+```{r}
+# Elbow method
+fviz_nbclust(AD2_km, kmeans, method = "wss") +
+  geom_vline(xintercept = 4, linetype = 2) + # add line for better visualisation
+  labs(subtitle = "Elbow method")
+```
+
+```{r, echo=TRUE}
+# Add clusters to dataframe original dataframe
+AD2_km <- AD2
+AD2_km$Clusters <- as.factor(Clusters$cluster)
+```
+
+#### Cluster Plot
+
+```{r, echo=TRUE}
+clusplot(AD2_km, AD2_km$Clusters, color=TRUE, shade=TRUE, labels=0, lines=0)
+```
+
+#### Cluster Centers
+
+```{r, echo=TRUE}
+res_kmeans <- cluster_analysis(AD2_km,
+                 n = 9,
+                 method = "kmeans")
+plot(summary(res_kmeans))
+```
+
+## Hierarchical Clustering Algorithms (HAC)
+
+```{r, echo=TRUE}
+# Set carrier names as row names
+AD2_HAC <- AD2
+rownames(AD2_HAC) <- AD2_HAC$airport_name
+View(AD2_HAC)
+```
+
+```{r, echo=TRUE}
+Euclidean1  <- dist(AD2_HAC, method = "euclidean")
+```
+
+### Cluster Dendrograms
+
+#### Euclidean Dendrogram
+
+```{r, echo=TRUE}
+HACa <- hclust(Euclidean1, method="complete")
+plot(HACa, cex=0.6, hang=-1)
+rect.hclust(HACa, k =6, border=2:5)
+```
+
+# Decision Tree
+
+## Cleaning the data
+
+```{r, echo=TRUE}
+# Set Airline dataset as AD and replace NA values with 0
+AD <- Airline
+AD[is.na(AD)] = 0
+sum(is.na(AD))
+```
+
+```{r, echo=TRUE}
+# Remove unnecessary columns
+AD1 <- subset(AD, select = - c(year, month, carrier, airport, airport_name, arr_flights, arr_del15, arr_cancelled, arr_diverted,arr_delay, carrier_delay, weather_delay, nas_delay, security_delay, late_aircraft_delay))
+
+AD2 <- subset(AD, select = - c(year, month, carrier, carrier_name, airport, arr_flights, arr_del15, carrier_ct, weather_ct,nas_ct, security_ct, late_aircraft_ct))
+```
+
+```{r, echo=TRUE}
+sample_data = sample.split(AD1, SplitRatio = 0.8)
+train_data <- subset(AD1, sample_data == TRUE)
+test_data  <- subset(AD1, sample_data == FALSE)
+
+#train_tree <-rpart(carrier_name ~., data = train_data, method="class", control=rpart.control(cp=0))
+
+train_tree <-rpart(carrier_name ~., data = train_data, method="class",
+                   control=rpart.control(minsplit=2, cp=0.001))
+
+# Training and test sets of data
+sample_data = sample.split(AD1, SplitRatio = 0.8)
+train_data <- subset(AD1, sample_data == TRUE)
+test_data <- subset(AD1, sample_data == FALSE)
+
+#Train Tree model 
+
+train_tree <-rpart(carrier_name ~., data = train_data, method="class", control=rpart.control(cp=0, maxdepth = 3, minsplit = 2))
+
+#Decision Tree
+
+rpart.plot(train_tree, box.palette=0)
+
+#Sample_tree<-rpart(Bought~Gender+Age, method="class", data=Train, control=rpart.control(minsplit=2, cp=0.001))
+```
+
+## Predicting the model
+
+```{r, echo=TRUE}
+# Predicting the model
+predicted=predict(train_tree,train_data,type="class")
+plot(predicted, main= "Predicting flight delays due to weather per carrier name", las = 2, cex.axis=1, cex.names=0.5)
+table(weather_ct=predicted,true=train_data$carrier_name)
+
+```
+
+```{r, echo=TRUE}
+#rsq.rpart(train_tree)
+```
+
+## Decision Tree use yes or no decision tree
+
+```{r, echo=TRUE}
+rpart.plot(train_tree, box.palette=0)
+rpart.plot(x=train_tree, yesno=2, type = 0, extra = 0, trace = -1)
+
+#Pruned_tree<-prune(train_tree,cp=0.23)
+
+fancyRpartPlot(train_tree)
+```
+
+```{r}
+#Still working on this
+'table(Carrier=predicted, true=test_data$carrier_name)
+
+#example <- confusionMatrix(data=predicted_value, reference = expected_value)
+
+example <- confusionMatrix(data=predicted, reference = test_data)
+
+accuracy(actual=test_data$carrier_name,predicted=prep)'
+
+```
+
+# Naive Bayes
+
+Naive Bayes is used to fit Naive Bayes model in which predictors are assumed to be independent within each class label.
+
+```{r, echo=TRUE}
+AD <- Airline
+AD[is.na(AD)] = 0
+sum(is.na(AD))
+```
+
+```{r, echo=TRUE}
+AD1 <- subset(AD, select = - c(year, month, carrier, airport, airport_name, arr_flights, arr_del15, arr_cancelled, arr_diverted, arr_delay, carrier_delay, weather_delay, nas_delay, security_delay, late_aircraft_delay))
+
+AD2 <- subset(AD, select = - c(year, month, carrier, carrier_name, airport, arr_flights, arr_del15, carrier_ct, weather_ct,nas_ct, security_ct, late_aircraft_ct))
+```
+
+## Frequencies
+
+**xtabs()** function: This function is used to create a contingency table from cross-classifying factors, usually contained in a data frame, using a formula interface.
+
+Skywest Airlines Inc. came out as the carrier with the highest frequency with 14,919 of being affected with some sort of delay. Out of the bigger carriers, Delta came in first with a frequency of 9,045. According to this test, one should avoid Skywest and Delta to lesser your chances of incurring some type of delay on your flight.
+
+```{r, echo=TRUE}
+Freq <- xtabs(~carrier_name, data = AD1)
+Freq
+```
+
+```{r, echo= TRUE}
+set.seed(1234)
+ind <- sample(2, nrow(AD1), replace = T, prob = c(0.8, 0.2))
+train <- AD1[ind == 1,]
+test <- AD1[ind == 2,]
+```
+
+## Naive Bayes
+
+The general function **naive_bayes()** detects the class of each feature in the dataset and, depending on the user choices, assumes possibly different distribution for each feature. It currently supports following class conditional distributions.
+
+The next model shows density plots of how different carriers get affected by every different type of delays.
+
+```{r, echo=TRUE}
+model <- naive_bayes(carrier_name ~ ., data = train, usekernel = F) 
+plot(model) 
+```
+
+For carrier delays we can see Allegiant Air got affected the most. Weather delays affected Frontier Airlines the most and for nas delays brought Allegiant Air in first. For security delays, United Airlines took the prize and lastly for late aircraft delays it went to Allegiant Air. Looking at the density numbers for this model, one could safely assume to avoid Allegiant Air to avoid any delay when it came in as the highest density in three of the five charts. That being said, Skywest Airline Inc. came in second against most of the different delays. Combining the frequency and density charts than Skywest Airlines Inc. has the biggest red flag and one to really avoid to decrease your chances of being delayed for a flight.
+
+```{r, echo=TRUE}
+p <- predict(model, train, type = 'prob')
+head(cbind(p, train))
+```
+
+## Pairs Panels
+
+A pairs plot is a matrix of scatterplots that let you understand the pairwise relationship between different variables in a dataset. Fortunately it's easy to create a pairs plot in R by using the pairs() function. Correlation shows the strength of a relationship between two variables and is expressed numerically by the correlation coefficient.
+
+In the next panel we can see that the highest correlation comes between carrier and late carrier. This correlation is easily understandable because when the aircrafts create a delay it will trigger the late aircraft delay variable. This correlation came in at 90%. The second highest correlation came in between air traffic delay and late aircraft delay at 80%.
+
+```{r, echo=TRUE}
+pairs.panels(AD1[-1])
+```
+
+```{r, echo=TRUE}
+pairs.panels(train[-1])
+```
+
+```{r}
+train %>%
+         ggplot(aes(x=carrier_name, y=weather_ct, fill = carrier_name)) +
+         geom_boxplot() +theme_bw()
+         ggtitle("Box Plot")
+         theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+model1 <- naive_bayes(carrier_name ~ ., data = train, usekernel = F, usepoisson = T) 
+plot(model1) 
+```
+
+# Key Question #1: Which airlines typically have significant flight delays?
+
+```{r, echo = TRUE}
+# Get highest number of flights more than 15 minutes late 
+    index <- which.max(data$arr_del15)
+    HighestAirline_arr_del15 <- data$carrier_name[index]
+    HighestAirline_arr_del15
+
+# Get highest number of flights delayed due to air carrier (e.g. no crew)
+    index <- which.max(data$carrier_ct)
+    HighestAirline_carrier_ct <- data$carrier_name[index]
+    HighestAirline_carrier_ct
+
+# Get highest number of flights due to weather
+    index <- which.max(data$weather_ct)
+    HighestAirline_weather_ct <- data$carrier_name[index]
+    HighestAirline_weather_ct
+
+# Get highest number of flights delayed due to National Aviation System (e.g. heavy air traffic)
+    index <- which.max(data$nas_ct)
+    HighestAirline_nas_ct <- data$carrier_name[index]
+    HighestAirline_nas_ct
+
+# Get highest number of flights canceled due to a security breach
+    index <- which.max(data$security_ct)
+    HighestAirline_security_ct <- data$carrier_name[index]
+    HighestAirline_security_ct
+
+# Get highest number of flights delayed as a result of another flight on the same aircraft delayed
+    index <- which.max(data$late_aircraft_ct)
+    HighestAirline_late_aircraft_ct <- data$carrier_name[index]
+    HighestAirline_late_aircraft_ct
+
+# Get highest number of cancelled flights
+    index <- which.max(data$arr_cancelled)
+    HighestAirline_arr_cancelled <- data$carrier_name[index]
+    HighestAirline_arr_cancelled
+    
+# Get highest number of flights that were diverted
+    index <- which.max(data$arr_diverted)
+    HighestAirline_arr_diverted <- data$carrier_name[index]
+    HighestAirline_arr_diverted
+
+# Get highest total time (minutes) of delayed flight
+    index <- which.max(data$arr_delay)
+    HighestAirline_arr_delay <- data$carrier_name[index]
+    HighestAirline_arr_delay
+
+# Get highest total time (minutes) of delay due to air carrier
+    index <- which.max(data$carrier_delay)
+    HighestAirline_carrier_delay <- data$carrier_name[index]
+    HighestAirline_carrier_delay
+    
+# Get highest total time (minutes) of delay due to inclement weather
+    index <- which.max(data$weather_delay)
+    HighestAirline_weather_delay <- data$carrier_name[index]
+    HighestAirline_weather_delay
+
+# Get highest total time (minutes) of delay due to National Aviation System
+    index <- which.max(data$nas_delay)
+    HighestAirline_nas_delay <- data$carrier_name[index]
+    HighestAirline_nas_delay
+  
+# Get highest total time (minutes) of delay as a result of a security issue
+    index <- which.max(data$security_delay)
+    HighestAirline_security_delay <- data$carrier_name[index]
+    HighestAirline_security_delay
+
+# Get highest total time (minutes) of delay flights as a result of a previous flight on the same airplane being late
+    index <- which.max(data$late_aircraft_delay)
+    HighestAirline_lateaircraftdelay<- data$carrier_name[index]
+    HighestAirline_lateaircraftdelay  
+```
+
+```{r, echo=TRUE}
+# Create variables for each output
+Variables                  <- c("arr_del15","carrier_ct","weather_ct","nas_ct","security_ct","late_aircraft_ct","arr_cancelled","arr_diverted","arr_delay","carrier_delay",
+                                  "weatherdelay","nas_delay","security_delay","lateaircraftdelay")
+Years                      <- unique(data$year)
+Highest_arr_del15          <- HighestAirline_arr_del15
+Highest_carrier_ct         <- HighestAirline_carrier_ct
+Highest_weather_ct         <- HighestAirline_weather_ct
+Highest_nas_ct             <- HighestAirline_nas_ct
+Highest_security_ct        <- HighestAirline_security_ct
+Highest_late_aircraft_ct   <- HighestAirline_late_aircraft_ct
+Highest_arr_cancelled      <- HighestAirline_arr_cancelled
+Highest_arr_diverted       <- HighestAirline_arr_diverted
+Highest_arr_delay          <- HighestAirline_arr_delay
+Highest_carrier_delay      <- HighestAirline_carrier_delay
+Highest_weather_delay      <- HighestAirline_weather_delay
+Highest_nas_delay          <- HighestAirline_nas_delay
+Highest_security_delay     <- HighestAirline_security_delay
+Highest_lateaircraftdelay  <- HighestAirline_lateaircraftdelay
+```
+
+```{r, echo= TRUE}
+# Create table for all outputs
+Highest_numbers <- data.frame(Highest_arr_del15, Highest_carrier_ct, Highest_weather_ct, Highest_nas_ct, Highest_security_ct, Highest_late_aircraft_ct, 
+                              Highest_arr_cancelled, Highest_arr_diverted, Highest_arr_delay, Highest_carrier_delay, Highest_weather_delay, Highest_nas_delay,Highest_security_delay, 
+                              Highest_lateaircraftdelay) 
+Highest_numbers
+
+# Convert columns into rows (transpose)
+Airline_with_significant_flight_delays <- t(Highest_numbers)
+Airline_with_significant_flight_delays <- data.frame(Airline_with_significant_flight_delays, row.names=Variables) 
+Airline_with_significant_flight_delays
+```
+
+This result shows that Delta Air Lines Inc. is the airline with most frequent with significant flight delays, following by SkyWest Airlines Inc. and American Airlines Inc, through the years of 2017 to 2022. The airlines with most significant flight delays are 
+
+Southwest Airlines Co.	 132,398,304.25 
+American Airlines Inc.	 116,828,009.76 
+SkyWest Airlines Inc.	   107,692,923.86 
+Delta Air Lines Inc.	    89,618,221.94 
+
+# Key Question #2: Which airports typically have significant flight delays?
+The affected airports that have significant flights delays are 
+
+ - Albuquerque, NM: Albuquerque International Sunport, New Mexico
+ - Arcata/Eureka, CA: California Redwood Coast Humboldt County, California
+
+# Key Question #3: Which time of year, and month typically have the most flight delays?
+December of 2019 was the month that had most flight delays, with a total number of 1,812 occurrences. 
+SkyWest Airlines Inc. airline had the higher number of events, with a total of 256 occurrences in December 2019.
+
+
+# Key Question #4: Which airlines typically have significant flight delays?
+SkyWest Airlines Inc. and Southwest Airlines Co. are the carriers with higher number of delays.
+
+
