@@ -1,4 +1,4 @@
-# Brandon O'Linn Data Science Portfolio
+# DataSciencePortfolio
 
 ### Education
 Applied Data Sciecne, MS
