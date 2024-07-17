@@ -1,7 +1,7 @@
 # DataSciencePortfolio
 
 ### Education
-Applied Data Sciecne, MS
+Applied Data Science, MS
 
 ### Work Experience
 Sr Analyst Actuarial, Nationwide Insurance
